@@ -10,7 +10,7 @@ import { fromWeb3JsKeypair, fromWeb3JsPublicKey} from '@metaplex-foundation/umi-
 interface uploadImageParameters {
     Umi : Umi,
     Filename : string,
-    Type : "image/png" | "image/jpg" 
+    Type : string
 }
 
 interface uploadMetadataParameters {

@@ -7,37 +7,26 @@ import {
     getSignatureFromTransaction,
     signTransactionMessageWithSigners,
     createKeyPairSignerFromBytes,
-    createKeypairFromBase58,
     Address
 } from "gill";
-import { loadKeypairSignerFromFile } from "gill/node";
 import {
     getCreateAccountInstruction,
     getCreateMetadataAccountV3Instruction,
     getTokenMetadataAddress,
 } from "gill/programs";
 import {
-    getCreateTokenInstructions,
     getInitializeMintInstruction,
     getMintSize,
     TOKEN_PROGRAM_ADDRESS,
     getAssociatedTokenAccountAddress,
     getCreateAssociatedTokenIdempotentInstruction,
     getMintToInstruction,
-    getTransferCheckedInstruction,
-    getTransferInstruction,
     getSetAuthorityInstruction,
     AuthorityType,
     
 } from "gill/programs/token";
 import { readFileSync } from "fs";
-
 import { Keypair } from "@solana/web3.js";
-import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
-import { irysUploader } from '@metaplex-foundation/umi-uploader-irys'
-import { createGenericFile, createSignerFromKeypair, signerIdentity } from "@metaplex-foundation/umi";
-import { fromWeb3JsKeypair, fromWeb3JsPublicKey} from '@metaplex-foundation/umi-web3js-adapters';
-
 import { uploadMetadata as uploadMetadataGCP, uploadImage as uploadImageGCP } from "./uploadGCP";
 import { initializeUMI, uploadImage as uploadImageArweave, uploadMetadata as uploadMetadataArweave} from "./uploadArweave";
 
@@ -68,22 +57,46 @@ function generateKeyPairFromSaveVanilla(filename : string) {
     return Keypair.fromSecretKey(keyPairBytes);
 }
 
+const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
+
+// Would be replaced by the Wallet Adapter to just get Signer
 const signer = await generateKeyPairFromSave("ClientWallet.json")
 console.log("Signer", signer.address);
 
-const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
-
+// Uses old Tokenkeg standard instead of Token2022
 const tokenProgram = TOKEN_PROGRAM_ADDRESS;
+
+// Generate the new Token Mint 
+// Can be replaced in the future with Vanity Grinded Address
 const mint = await generateKeyPairSigner();
 console.log("mint:", mint.address);
+
+// Can be replaced by the Protocol (This) Address to renounce ownership of maker
+// Currently not used
+// If Used Transaction would have still have to Make ATA of Client 
+// Then Transfer from Owner (This) Address to Client
+// Which is more steps = more expensive
 const owner = signer.address;
 const ata = await getAssociatedTokenAccountAddress(mint, owner, TOKEN_PROGRAM_ADDRESS);
+
+// Client Address will be replaced by Wallet Adapter Public Key Address
+// Currently the one used to directly send to the user the new Token
 const clientAddress = "H3Z4PiFmX8EWxUrFoUoCtkubkSLXnZTPUSpPdqZn6Ecy" as Address;
 const clientATA = await getAssociatedTokenAccountAddress(mint, clientAddress, TOKEN_PROGRAM_ADDRESS);
 
+// Calculate the Mint Size for Holding All Data and the Metadata Address
+// Specify the Metadata as well
+// Image FileType and FileName should be replaced by open dialog box
+// Limit the FileType to supported image formats
 const space = getMintSize();
-
 const metadataAddress = await getTokenMetadataAddress(mint);
+const tokenMetadata = {
+    Name : "HATDOG TOKEN",
+    Symbol : "HEHE",
+    Description : "HEHE Description",
+    ImageFileName : "mp.png", 
+    ImageFileType : "image/png" // For Arweave
+}
 
 // Legacy Metadata uploading using Arweave
 
@@ -125,14 +138,14 @@ const ArweaveUMI = initializeUMI({
 });
 const imageUri = await uploadImageArweave({
     Umi : ArweaveUMI, 
-    Filename : "mp.png",
-    Type : "image/png"
+    Filename : tokenMetadata.ImageFileName,
+    Type : tokenMetadata.ImageFileType
 });
 const metadataUri = await uploadMetadataArweave({
     Umi : ArweaveUMI,
-    TokenName : "HATDOG TOKEN",
-    TokenSymbol : "HEHE",
-    TokenDescription : "HEHE Token Description",
+    TokenName : tokenMetadata.Name,
+    TokenSymbol : tokenMetadata.Symbol,
+    TokenDescription : tokenMetadata.Description,
     TokenImageURL : imageUri
 });
 
@@ -144,15 +157,17 @@ const metadataUri = await uploadMetadataArweave({
 // })
 
 // const metadataUri = await uploadMetadata({
-//     TokenName : "HATDOG TOKEN",
-//     TokenSymbol : "HEHE",
-//     TokenDescription : "HEHE Token Description",
+//     TokenName : tokenMetadata.Name,
+//     TokenSymbol : tokenMetadata.Symbol,
+//     TokenDescription : tokenMetadata.Description,
 //     TokenImageURL : imageUri,
-//     CloudFileName : "hatdogMetadata.json"
+//     CloudFileName : `${new Date().getTime()}.json`
 // })
 
-
-
+// Create Transaction [Gill]
+// Issues with old Solana/Web3.js Library Transactions:
+// - Metadata is only seen on raw.github
+// - Metadata is not in sync (sometimes there is no image or no name)
 const tx = createTransaction({
     feePayer: signer,
     version: "legacy",
@@ -199,7 +214,7 @@ const tx = createTransaction({
             ata : clientATA,
             owner : clientAddress,
             mint : mint.address,
-            tokenProgram : TOKEN_PROGRAM_ADDRESS
+            tokenProgram : tokenProgram
         }),
         getMintToInstruction(
             {
@@ -209,7 +224,7 @@ const tx = createTransaction({
                 amount: 169_000_000_000,
             },
             {
-                programAddress: TOKEN_PROGRAM_ADDRESS,
+                programAddress: tokenProgram,
             },
         ),
         getSetAuthorityInstruction(
