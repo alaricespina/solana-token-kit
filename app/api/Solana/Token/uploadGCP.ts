@@ -12,7 +12,20 @@ const storage = new Storage({
 
 const bucket = storage.bucket(GCP_BucketLink);
 
-export async function uploadImageToFirebase(ImageFilePath : string, CloudFileName : string) {
+interface uploadImageParameters {
+    ImageFilePath : string,
+    CloudFileName : string
+}
+
+interface uploadMetadataParameters {
+    TokenName : string,
+    TokenSymbol : string,
+    TokenDescription : string,
+    TokenImageURL : string,
+    CloudFileName : string
+}
+
+export async function uploadImage({ImageFilePath, CloudFileName} : uploadImageParameters) {
     try {
         const storagepath = `${CloudFileName}`;
         const result = await bucket.upload(ImageFilePath, {
@@ -41,14 +54,20 @@ export async function uploadImageToFirebase(ImageFilePath : string, CloudFileNam
     }
 }
 
-export async function uploadJsonToFirebase(JSONObject : object, CloudFileName : string) {
+export async function uploadMetadata({TokenName, TokenSymbol, TokenDescription, TokenImageURL, CloudFileName} : uploadMetadataParameters) {
     // Create a New File + CurrentTime for Unique Name
     // const timestamp = new Date().getTime()
     // const fileName = `${fileName}${timestamp}.json`
 
     // Create a New File 
     const file = bucket.file(CloudFileName)
-    const contents = JSON.stringify(JSONObject)
+    const TokenMetadata = {
+        name: TokenName,
+        symbol: TokenSymbol,
+        description: TokenDescription,
+        image: TokenImageURL, // Either use variable or paste in string of the uri.
+    };
+    const contents = JSON.stringify(TokenMetadata)
     await file.save(contents)
     return `https://storage.googleapis.com/devnet-storage/${CloudFileName}`
 }

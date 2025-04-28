@@ -3,6 +3,9 @@ import { irysUploader } from '@metaplex-foundation/umi-uploader-irys'
 import { createGenericFile, signerIdentity } from "@metaplex-foundation/umi";
 import { readFileSync } from "fs"
 import { KeypairSigner, Umi } from '@metaplex-foundation/umi';
+import { Keypair } from "@solana/web3.js"
+import { createSignerFromKeypair } from "@metaplex-foundation/umi";
+import { fromWeb3JsKeypair, fromWeb3JsPublicKey} from '@metaplex-foundation/umi-web3js-adapters';
 
 interface uploadImageParameters {
     Umi : Umi,
@@ -20,14 +23,15 @@ interface uploadMetadataParameters {
 
 interface initializeUMIParameters {
     RPCEndpoint : string,
-    UserSigner : KeypairSigner
+    UserKeypair : Keypair
 }
 
 
 const devnetEndpoint = "https://api.devnet.solana.com";
 
-export function initializeUMI({RPCEndpoint, UserSigner} : initializeUMIParameters) : Umi {
+export function initializeUMI({RPCEndpoint, UserKeypair} : initializeUMIParameters) : Umi {
     const NewUmi = createUmi(RPCEndpoint).use(irysUploader());
+    const UserSigner = createSignerFromKeypair(NewUmi, fromWeb3JsKeypair(UserKeypair));
     NewUmi.use(signerIdentity(UserSigner, true))
     return NewUmi;
 }
